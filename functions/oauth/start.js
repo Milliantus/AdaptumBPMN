@@ -1,7 +1,10 @@
 import { badRequest } from "../_utils/http.js";
 
 function getAuthorizeUrl({ baseDomain, clientId, redirectUri, state }) {
-  const u = new URL("/oauth", baseDomain);
+  // amoCRM authorization UI is hosted on the main domain, not on account subdomain.
+  // Account subdomain (baseDomain) is still required for token exchange and API calls.
+  const authHost = baseDomain.includes(".amocrm.ru") ? "https://www.amocrm.ru" : baseDomain;
+  const u = new URL("/oauth", authHost);
   u.searchParams.set("client_id", clientId);
   u.searchParams.set("state", state);
   // amoCRM/Kommo expects mode=popup|post_message (affects redirect behavior).
