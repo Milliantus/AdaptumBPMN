@@ -30,8 +30,9 @@ export async function onRequest({ request, env }) {
   if (!accountId) return badRequest("account_id is required");
 
   // Optional protection: require secret if configured
-  const provided = String(u.searchParams.get("secret") || "");
-  if (env.API_SECRET && provided !== env.API_SECRET) {
+  const provided = String(u.searchParams.get("secret") || "").trim();
+  const expected = env.API_SECRET ? String(env.API_SECRET).trim() : "";
+  if (expected && provided !== expected) {
     return json({ ok: false, error: "invalid secret" }, { status: 401 });
   }
 
