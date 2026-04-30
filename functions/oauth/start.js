@@ -3,9 +3,10 @@ import { badRequest } from "../_utils/http.js";
 function getAuthorizeUrl({ baseDomain, clientId, redirectUri, state }) {
   const u = new URL("/oauth", baseDomain);
   u.searchParams.set("client_id", clientId);
-  u.searchParams.set("redirect_uri", redirectUri);
-  u.searchParams.set("response_type", "code");
   u.searchParams.set("state", state);
+  // amoCRM/Kommo expects mode=popup|post_message (affects redirect behavior).
+  // We use post_message to keep auth inside the opened window.
+  u.searchParams.set("mode", "post_message");
   return u.toString();
 }
 

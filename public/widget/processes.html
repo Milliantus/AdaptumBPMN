@@ -73,6 +73,9 @@
       connectBtn.addEventListener("click", () => {
         const baseDomain = baseDomainEl.value.trim();
         if (!baseDomain) return log("Укажи base domain amoCRM");
+        if (!/^https:\/\/.+\.amocrm\.ru\/?$/.test(baseDomain)) {
+          return log("Base domain должен быть вида https://<subdomain>.amocrm.ru");
+        }
         const url = new URL("/oauth/start", window.location.origin);
         url.searchParams.set("base_domain", baseDomain);
         window.open(url.toString(), "_blank", "popup,width=520,height=720");
