@@ -5,20 +5,108 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Adaptum BPMN — Процессы</title>
     <link rel="stylesheet" href="/widget/style.css" />
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@18.3.1/dist/assets/diagram-js.css" />
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@18.3.1/dist/assets/bpmn-font/css/bpmn.css" />
+    <style>
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .toolbar .spacer {
+        flex: 1 1 auto;
+      }
+      #bpmnWrap {
+        height: 640px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+      }
+      #bpmn {
+        width: 100%;
+        height: 100%;
+      }
+      textarea.code {
+        width: 100%;
+        min-height: 220px;
+        box-sizing: border-box;
+        background: rgba(0, 0, 0, 0.25);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        color: var(--text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 12px;
+        outline: none;
+      }
+      dialog {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 0;
+        background: var(--card);
+        color: var(--text);
+        max-width: 980px;
+        width: calc(100vw - 40px);
+      }
+      dialog::backdrop {
+        background: rgba(0, 0, 0, 0.6);
+      }
+      .dlgHead {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .dlgBody {
+        padding: 14px;
+      }
+      .dlgFoot {
+        padding: 12px 14px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 12px;
+      }
+    </style>
   </head>
   <body>
     <div class="wrap">
       <div class="card">
         <h2 style="margin: 0 0 6px 0">Процессы</h2>
         <div class="hint">
-          Здесь будет BPMN‑редактор (например, на базе <code>bpmn-js</code>) и список процессов. В этом каркасе —
-          заглушка.
+          BPMN‑редактор. Можно рисовать схему, сохранять/загружать BPMN XML, экспортировать SVG.
         </div>
       </div>
 
       <div style="height: 14px"></div>
 
       <div class="card">
+        <div class="toolbar">
+          <button id="newBtn" class="btn">Новая схема</button>
+          <button id="importBtn" class="btn">Импорт BPMN XML</button>
+          <button id="exportBtn" class="btn">Экспорт BPMN XML</button>
+          <button id="exportSvgBtn" class="btn">Экспорт SVG</button>
+          <button id="runBtn" class="btn primary">Запустить (MVP)</button>
+          <span class="spacer"></span>
+          <span class="muted" id="autosaveState">Автосохранение: —</span>
+        </div>
+
+        <div style="height: 12px"></div>
+
+        <div id="bpmnWrap">
+          <div id="bpmn"></div>
+        </div>
+
+        <div style="height: 12px"></div>
+
         <div class="row">
           <div>
             <label>Base domain amoCRM (пример: https://mycompany.amocrm.ru)</label>
@@ -52,7 +140,26 @@
       </div>
     </div>
 
+    <dialog id="xmlDlg">
+      <div class="dlgHead">
+        <div>
+          <div style="font-weight: 700">BPMN XML</div>
+          <div class="muted" id="xmlHint">Импорт/экспорт</div>
+        </div>
+        <button id="xmlCloseX" class="btn">Закрыть</button>
+      </div>
+      <div class="dlgBody">
+        <textarea id="xmlText" class="code" placeholder="Вставь сюда BPMN XML..."></textarea>
+      </div>
+      <div class="dlgFoot">
+        <button id="xmlCancel" class="btn">Отмена</button>
+        <button id="xmlApply" class="btn primary">Применить</button>
+      </div>
+    </dialog>
+
+    <script src="https://unpkg.com/bpmn-js@18.3.1/dist/bpmn-modeler.development.js"></script>
     <script>
+      const autosaveStateEl = document.getElementById("autosaveState");
       const baseDomainEl = document.getElementById("baseDomain");
       const accountIdEl = document.getElementById("accountId");
       const connectBtn = document.getElementById("connectBtn");
@@ -60,6 +167,21 @@
       const debugEl = document.getElementById("debug");
       const statusTextEl = document.getElementById("statusText");
       const dotEl = document.getElementById("dot");
+
+      const xmlDlg = document.getElementById("xmlDlg");
+      const xmlText = document.getElementById("xmlText");
+      const xmlApply = document.getElementById("xmlApply");
+      const xmlCancel = document.getElementById("xmlCancel");
+      const xmlCloseX = document.getElementById("xmlCloseX");
+      const xmlHint = document.getElementById("xmlHint");
+
+      const newBtn = document.getElementById("newBtn");
+      const importBtn = document.getElementById("importBtn");
+      const exportBtn = document.getElementById("exportBtn");
+      const exportSvgBtn = document.getElementById("exportSvgBtn");
+      const runBtn = document.getElementById("runBtn");
+
+      const STORAGE_KEY = "adaptum_bpmn_xml:v1";
 
       function setStatus(connected) {
         dotEl.classList.toggle("ok", connected);
@@ -69,6 +191,199 @@
       function log(obj) {
         debugEl.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
       }
+
+      function downloadFile(filename, text, mime = "text/plain") {
+        const blob = new Blob([text], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      const defaultDiagram = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  id="Definitions_1"
+  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_1" isExecutable="false">
+    <bpmn:startEvent id="StartEvent_1" name="Старт" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_1">
+        <dc:Bounds x="152" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      const bpmnModeler = new BpmnJS({
+        container: "#bpmn",
+        keyboard: { bindTo: window },
+      });
+
+      async function importXml(xml) {
+        await bpmnModeler.importXML(xml);
+        const canvas = bpmnModeler.get("canvas");
+        canvas.zoom("fit-viewport", "auto");
+      }
+
+      async function exportXml(pretty = true) {
+        const { xml } = await bpmnModeler.saveXML({ format: pretty });
+        return xml;
+      }
+
+      async function exportSvg() {
+        const { svg } = await bpmnModeler.saveSVG();
+        return svg;
+      }
+
+      function setAutosaveState(text) {
+        autosaveStateEl.textContent = "Автосохранение: " + text;
+      }
+
+      async function loadInitialDiagram() {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        try {
+          await importXml(saved || defaultDiagram);
+          setAutosaveState(saved ? "загружено" : "пустой шаблон");
+        } catch (e) {
+          await importXml(defaultDiagram);
+          setAutosaveState("сброс (ошибка загрузки)");
+          log({ ok: false, error: String(e?.message || e) });
+        }
+      }
+
+      let autosaveTimer = null;
+      function scheduleAutosave() {
+        if (autosaveTimer) clearTimeout(autosaveTimer);
+        autosaveTimer = setTimeout(async () => {
+          try {
+            const xml = await exportXml(true);
+            localStorage.setItem(STORAGE_KEY, xml);
+            setAutosaveState("сохранено");
+          } catch (e) {
+            setAutosaveState("ошибка");
+          }
+        }, 600);
+        setAutosaveState("изменения…");
+      }
+
+      bpmnModeler.on("commandStack.changed", scheduleAutosave);
+
+      newBtn.addEventListener("click", async () => {
+        localStorage.removeItem(STORAGE_KEY);
+        await importXml(defaultDiagram);
+        setAutosaveState("новая схема");
+      });
+
+      importBtn.addEventListener("click", async () => {
+        xmlHint.textContent = "Вставь BPMN XML и нажми «Применить»";
+        xmlText.value = "";
+        xmlDlg.showModal();
+        xmlApply.onclick = async () => {
+          const xml = xmlText.value.trim();
+          if (!xml) return;
+          try {
+            await importXml(xml);
+            localStorage.setItem(STORAGE_KEY, xml);
+            setAutosaveState("импортировано");
+            xmlDlg.close();
+          } catch (e) {
+            log({ ok: false, error: String(e?.message || e) });
+          }
+        };
+      });
+
+      exportBtn.addEventListener("click", async () => {
+        const xml = await exportXml(true);
+        xmlHint.textContent = "Скопируй или скачай BPMN XML";
+        xmlText.value = xml;
+        xmlDlg.showModal();
+        xmlApply.onclick = () => {
+          downloadFile("process.bpmn", xml, "application/xml");
+          xmlDlg.close();
+        };
+      });
+
+      exportSvgBtn.addEventListener("click", async () => {
+        const svg = await exportSvg();
+        downloadFile("process.svg", svg, "image/svg+xml");
+      });
+
+      function buildGraphFromModeler() {
+        const elementRegistry = bpmnModeler.get("elementRegistry");
+        const nodes = [];
+        const flows = [];
+
+        elementRegistry.forEach((el) => {
+          if (!el.businessObject) return;
+          const bo = el.businessObject;
+          const doc = Array.isArray(bo.documentation) && bo.documentation[0] ? bo.documentation[0].text : "";
+          nodes.push({
+            id: bo.id,
+            type: bo.$type,
+            name: bo.name || "",
+            doc: doc || "",
+          });
+          if (bo.outgoing) {
+            for (const o of bo.outgoing) {
+              if (!o || !o.targetRef) continue;
+              const cond = o.conditionExpression ? o.conditionExpression.body || "" : "";
+              flows.push({
+                id: o.id,
+                from: bo.id,
+                to: o.targetRef.id,
+                condition: cond,
+              });
+            }
+          }
+        });
+
+        // pick first StartEvent as start
+        const start = nodes.find((n) => n.type === "bpmn:StartEvent");
+        return { graph: { nodes, flows }, startNodeId: start?.id || "" };
+      }
+
+      runBtn.addEventListener("click", async () => {
+        const accountId = accountIdEl.value.trim();
+        if (!accountId) return log("Укажи account id");
+
+        const baseDomain = baseDomainEl.value.trim();
+        if (!baseDomain) return log("Укажи base domain amoCRM");
+
+        const leadId = prompt("Lead ID (сделка), для теста:", "");
+        if (!leadId) return;
+
+        const { graph, startNodeId } = buildGraphFromModeler();
+        if (!startNodeId) return log("Не найден StartEvent в схеме");
+
+        const url = new URL("/api/process/run", window.location.origin);
+        const res = await fetch(url.toString(), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            account_id: accountId,
+            entity: { type: "lead", id: Number(leadId) },
+            graph,
+            start_node_id: startNodeId,
+            vars: {
+              "amo.base_domain": baseDomain,
+            },
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        log(json);
+      });
+
+      xmlCancel.addEventListener("click", () => xmlDlg.close());
+      xmlCloseX.addEventListener("click", () => xmlDlg.close());
 
       connectBtn.addEventListener("click", () => {
         const baseDomain = baseDomainEl.value.trim();
@@ -91,6 +406,8 @@
         log(json);
         setStatus(Boolean(json.connected));
       });
+
+      loadInitialDiagram();
     </script>
   </body>
 </html>
