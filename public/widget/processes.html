@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Adaptum BPMN — Процессы</title>
+    <link rel="stylesheet" href="/widget/style.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h2 style="margin: 0 0 6px 0">Процессы</h2>
+        <div class="hint">
+          Здесь будет BPMN‑редактор (например, на базе <code>bpmn-js</code>) и список процессов. В этом каркасе —
+          заглушка.
+        </div>
+      </div>
+
+      <div style="height: 14px"></div>
+
+      <div class="card">
+        <div class="row">
+          <div>
+            <label>Base domain amoCRM (пример: https://mycompany.amocrm.ru)</label>
+            <input id="baseDomain" placeholder="https://example.amocrm.ru" />
+            <div class="hint">Нужно для старта OAuth. В реальном виджете можно подставлять из контекста amoCRM.</div>
+          </div>
+          <div>
+            <label>Account ID (числовой)</label>
+            <input id="accountId" placeholder="12345678" />
+            <div class="hint">В реальном виджете берётся из <code>AMOCRM.constant('account')</code>.</div>
+          </div>
+        </div>
+
+        <div style="height: 12px"></div>
+
+        <div class="row" style="align-items: center">
+          <div>
+            <button id="connectBtn" class="btn primary">Подключить amoCRM (OAuth)</button>
+            <div class="hint">Откроет OAuth через этот же домен Cloudflare Pages.</div>
+          </div>
+          <div>
+            <div class="status"><span id="dot" class="dot"></span><span id="statusText">Не проверяли</span></div>
+            <div class="hint">Проверка: <code>GET /api/auth/status?account_id=...</code></div>
+          </div>
+        </div>
+
+        <div style="height: 12px"></div>
+        <button id="checkBtn" class="btn">Проверить подключение</button>
+        <div style="height: 12px"></div>
+        <pre id="debug"></pre>
+      </div>
+    </div>
+
+    <script>
+      const baseDomainEl = document.getElementById("baseDomain");
+      const accountIdEl = document.getElementById("accountId");
+      const connectBtn = document.getElementById("connectBtn");
+      const checkBtn = document.getElementById("checkBtn");
+      const debugEl = document.getElementById("debug");
+      const statusTextEl = document.getElementById("statusText");
+      const dotEl = document.getElementById("dot");
+
+      function setStatus(connected) {
+        dotEl.classList.toggle("ok", connected);
+        statusTextEl.textContent = connected ? "Подключено" : "Не подключено";
+      }
+
+      function log(obj) {
+        debugEl.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+      }
+
+      connectBtn.addEventListener("click", () => {
+        const baseDomain = baseDomainEl.value.trim();
+        if (!baseDomain) return log("Укажи base domain amoCRM");
+        const url = new URL("/oauth/start", window.location.origin);
+        url.searchParams.set("base_domain", baseDomain);
+        window.open(url.toString(), "_blank", "popup,width=520,height=720");
+      });
+
+      checkBtn.addEventListener("click", async () => {
+        const accountId = accountIdEl.value.trim();
+        if (!accountId) return log("Укажи account id");
+        const url = new URL("/api/auth/status", window.location.origin);
+        url.searchParams.set("account_id", accountId);
+        const res = await fetch(url.toString(), { credentials: "include" });
+        const json = await res.json().catch(() => ({}));
+        log(json);
+        setStatus(Boolean(json.connected));
+      });
+    </script>
+  </body>
+</html>
+
