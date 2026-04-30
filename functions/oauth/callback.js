@@ -46,8 +46,21 @@ export async function onRequest({ request, env }) {
     const state = String(u.searchParams.get("state") || "");
     const cookieState = String(getCookie(request, "oauth_state") || "");
 
-    // amoCRM обычно присылает referer (base domain аккаунта) как параметр
-    const baseDomain = String(u.searchParams.get("referer") || u.searchParams.get("base_domain") || "");
+    // amoCRM может прислать домен аккаунта как:
+    // - referer (sic) или referrer
+    // - иногда без схемы (например "2453.amocrm.ru")
+    const rawDomain = String(
+      u.searchParams.get("referer") ||
+        u.searchParams.get("referrer") ||
+        u.searchParams.get("base_domain") ||
+        u.searchParams.get("baseDomain") ||
+        "",
+    ).trim();
+    const baseDomain = rawDomain
+      ? rawDomain.startsWith("http")
+        ? rawDomain
+        : `https://${rawDomain.replace(/^\/+/, "")}`
+      : "";
 
     if (!code) return badRequest("Missing code");
     if (!state || state !== cookieState) return badRequest("Invalid state");
