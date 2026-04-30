@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: adaptum-bpmn
+    env: node
+    rootDir: server
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8787
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: AMO_REDIRECT_PATH
+        value: /oauth/callback
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: AMO_CLIENT_ID
+        sync: false
+      - key: AMO_CLIENT_SECRET
+        sync: false
+      - key: TOKENS_SECRET
+        sync: false
+

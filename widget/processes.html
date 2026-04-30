@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Adaptum BPMN — Процессы</title>
+    <link rel="stylesheet" href="/widget/style.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h2 style="margin: 0 0 6px 0">Процессы</h2>
+        <div class="hint">
+          Здесь будет BPMN‑редактор (например, на базе `bpmn-js`) и список процессов. В этом каркасе — заглушка.
+        </div>
+      </div>
+
+      <div style="height: 14px"></div>
+
+      <div class="card">
+        <div class="row">
+          <div>
+            <label>Схема процесса (JSON)</label>
+            <input id="schema" placeholder='{"nodes":[],"edges":[]}' />
+            <div class="hint">
+              Для маркетплейса мы будем хранить схемы в настройках виджета (amoCRM widget settings), но исполнение будет
+              на сервере.
+            </div>
+          </div>
+          <div>
+            <label>Тестовый запуск</label>
+            <button id="run" class="btn primary">Запустить (заглушка)</button>
+            <div class="hint">Следующий шаг: сделать `/api/process/run` и связать с сущностями amoCRM.</div>
+          </div>
+        </div>
+
+        <div style="height: 12px"></div>
+        <pre id="out">Ожидаю действий…</pre>
+      </div>
+    </div>
+
+    <script>
+      const schemaEl = document.getElementById("schema");
+      const outEl = document.getElementById("out");
+      document.getElementById("run").addEventListener("click", () => {
+        const v = schemaEl.value.trim();
+        outEl.textContent = "Запуск процесса (пока без исполнения):\n" + (v || "<пусто>");
+      });
+    </script>
+  </body>
+</html>
+

@@ -1,0 +1,15 @@
+{
+  "widget": {
+    "name": "Adaptum BPMN",
+    "description": "BPMN-like process builder and automations runner.",
+    "short_description": "Processes & automations"
+  },
+  "settings": {
+    "server_base_url": "Server URL (HTTPS)",
+    "processes_json": "Process schemes (JSON)"
+  },
+  "advanced": {
+    "title": "Processes"
+  }
+}
+
