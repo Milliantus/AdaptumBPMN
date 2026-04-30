@@ -93,6 +93,25 @@
       .djs-label {
         fill: rgba(241, 245, 249, 0.92) !important;
       }
+
+      /* element fills (so white default doesn't wash out icons/text) */
+      .djs-shape .djs-visual > rect,
+      .djs-shape .djs-visual > polygon,
+      .djs-shape .djs-visual > circle,
+      .djs-shape .djs-visual > ellipse,
+      .djs-shape .djs-visual > path {
+        fill: rgba(15, 23, 42, 0.55) !important;
+      }
+      /* keep event inner fill a bit brighter */
+      .djs-shape[data-element-id^="StartEvent"] .djs-visual > circle,
+      .djs-shape[data-element-id^="EndEvent"] .djs-visual > circle {
+        fill: rgba(15, 23, 42, 0.35) !important;
+      }
+      /* icons inside tasks/gateways */
+      .djs-shape .djs-visual text,
+      .djs-shape .djs-visual tspan {
+        fill: rgba(241, 245, 249, 0.92) !important;
+      }
       /* selection / hover */
       .djs-outline {
         stroke: rgba(96, 165, 250, 0.95) !important;
@@ -126,6 +145,27 @@
       }
       .djs-palette .entry:hover {
         background: rgba(96, 165, 250, 0.18) !important;
+      }
+
+      /* context pad (the mini icons near selected element) */
+      .djs-context-pad {
+        background: rgba(15, 23, 42, 0.92) !important;
+        border: 1px solid rgba(226, 232, 240, 0.14) !important;
+        border-radius: 12px !important;
+        padding: 6px !important;
+      }
+      .djs-context-pad .entry {
+        background: rgba(255, 255, 255, 0.06) !important;
+        border: 1px solid rgba(226, 232, 240, 0.14) !important;
+        border-radius: 10px !important;
+        margin: 4px !important;
+      }
+      .djs-context-pad .entry:hover {
+        background: rgba(96, 165, 250, 0.18) !important;
+        border-color: rgba(96, 165, 250, 0.35) !important;
+      }
+      .djs-context-pad .entry:before {
+        color: rgba(241, 245, 249, 0.92) !important;
       }
     </style>
   </head>
@@ -260,6 +300,7 @@
       const runBtn = document.getElementById("runBtn");
 
       const STORAGE_KEY = "adaptum_bpmn_xml:v1";
+      const PREFS_KEY = "adaptum_bpmn_prefs:v1";
 
       function setStatus(connected) {
         dotEl.classList.toggle("ok", connected);
@@ -268,6 +309,43 @@
 
       function log(obj) {
         debugEl.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+      }
+
+      function loadPrefs() {
+        try {
+          const raw = localStorage.getItem(PREFS_KEY);
+          if (!raw) return;
+          const p = JSON.parse(raw);
+          if (p.baseDomain && !baseDomainEl.value) baseDomainEl.value = p.baseDomain;
+          if (p.accountId && !accountIdEl.value) accountIdEl.value = p.accountId;
+        } catch {}
+      }
+
+      function savePrefs() {
+        try {
+          localStorage.setItem(
+            PREFS_KEY,
+            JSON.stringify({
+              baseDomain: baseDomainEl.value.trim(),
+              accountId: accountIdEl.value.trim(),
+            }),
+          );
+        } catch {}
+      }
+
+      async function checkConnection(silent = false) {
+        const accountId = accountIdEl.value.trim();
+        if (!accountId) {
+          if (!silent) log("Укажи account id");
+          setStatus(false);
+          return;
+        }
+        const url = new URL("/api/auth/status", window.location.origin);
+        url.searchParams.set("account_id", accountId);
+        const res = await fetch(url.toString(), { credentials: "include" });
+        const data = await res.json().catch(() => ({}));
+        if (!silent) log(data);
+        setStatus(Boolean(data.connected));
       }
 
       function downloadFile(filename, text, mime = "text/plain") {
@@ -535,23 +613,24 @@
         if (!/^https:\/\/.+\.amocrm\.ru\/?$/.test(baseDomain)) {
           return log("Base domain должен быть вида https://<subdomain>.amocrm.ru");
         }
+        savePrefs();
         const url = new URL("/oauth/start", window.location.origin);
         url.searchParams.set("base_domain", baseDomain);
         window.open(url.toString(), "_blank", "popup,width=520,height=720");
       });
 
       checkBtn.addEventListener("click", async () => {
-        const accountId = accountIdEl.value.trim();
-        if (!accountId) return log("Укажи account id");
-        const url = new URL("/api/auth/status", window.location.origin);
-        url.searchParams.set("account_id", accountId);
-        const res = await fetch(url.toString(), { credentials: "include" });
-        const json = await res.json().catch(() => ({}));
-        log(json);
-        setStatus(Boolean(json.connected));
+        savePrefs();
+        await checkConnection(false);
       });
 
+      baseDomainEl.addEventListener("change", savePrefs);
+      accountIdEl.addEventListener("change", savePrefs);
+      window.addEventListener("focus", () => checkConnection(true));
+
       loadInitialDiagram();
+      loadPrefs();
+      checkConnection(true);
     </script>
   </body>
 </html>
