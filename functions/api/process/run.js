@@ -125,6 +125,40 @@ async function runAction({ ctx, accountId, entity, node, vars }) {
     return { ok: true, action: "note" };
   }
 
+  if (kind === "task") {
+    // Create a task for an entity (MVP: lead only)
+    // doc:
+    //  { "kind":"task", "text":"Позвонить", "minutes_from_now": 60, "responsible_user_id": 123, "task_type_id": 1 }
+    if (entity.type !== "lead") throw new Error("task supports lead only in MVP");
+    const text = String(doc.text || doc.title || "");
+    if (!text) throw new Error("task.text is required");
+
+    const minutes = doc.minutes_from_now != null ? Number(doc.minutes_from_now) : 60;
+    const completeTill = doc.complete_till
+      ? Number(doc.complete_till)
+      : Math.floor((Date.now() + Math.max(1, minutes) * 60_000) / 1000);
+
+    const task = {
+      entity_id: Number(entity.id),
+      entity_type: "leads",
+      text,
+      complete_till: completeTill,
+    };
+
+    if (doc.responsible_user_id) task.responsible_user_id = Number(doc.responsible_user_id);
+    if (doc.task_type_id) task.task_type_id = Number(doc.task_type_id);
+
+    const created = await amoFetch({
+      ...ctx,
+      method: "POST",
+      path: "/api/v4/tasks",
+      body: [task],
+    });
+
+    const id = created?._embedded?.tasks?.[0]?.id;
+    return { ok: true, action: "task", task_id: id || null };
+  }
+
   if (kind === "set_var") {
     const k = String(doc.key || "");
     if (!k) throw new Error("set_var.key is required");
