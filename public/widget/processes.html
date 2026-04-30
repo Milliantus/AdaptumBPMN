@@ -75,6 +75,58 @@
         color: var(--muted);
         font-size: 12px;
       }
+
+      /* ---- bpmn-js contrast overrides (dark UI friendly) ---- */
+      /* lines / arrows */
+      .djs-connection .djs-visual path,
+      .djs-shape .djs-visual path {
+        stroke: rgba(226, 232, 240, 0.9) !important;
+      }
+      .djs-connection .djs-visual path {
+        stroke-width: 2.25px !important;
+      }
+      .djs-connection-marker path {
+        fill: rgba(226, 232, 240, 0.95) !important;
+        stroke: rgba(226, 232, 240, 0.95) !important;
+      }
+      /* labels */
+      .djs-label {
+        fill: rgba(241, 245, 249, 0.92) !important;
+      }
+      /* selection / hover */
+      .djs-outline {
+        stroke: rgba(96, 165, 250, 0.95) !important;
+        stroke-width: 2px !important;
+      }
+      /* direct editing (when you type on canvas) */
+      .djs-direct-editing-parent {
+        background: transparent !important;
+      }
+      .djs-direct-editing-content {
+        color: #0b1020 !important;
+        background: rgba(255, 255, 255, 0.92) !important;
+        border-radius: 10px !important;
+        padding: 6px 8px !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
+      }
+      .djs-direct-editing-content textarea,
+      .djs-direct-editing-content input {
+        color: #0b1020 !important;
+        caret-color: #0b1020 !important;
+      }
+      /* palette */
+      .djs-palette {
+        background: rgba(15, 23, 42, 0.9) !important;
+        border: 1px solid rgba(226, 232, 240, 0.14) !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+      }
+      .djs-palette .entry {
+        color: rgba(241, 245, 249, 0.92) !important;
+      }
+      .djs-palette .entry:hover {
+        background: rgba(96, 165, 250, 0.18) !important;
+      }
     </style>
   </head>
   <body>
@@ -94,6 +146,7 @@
           <button id="importBtn" class="btn">Импорт BPMN XML</button>
           <button id="exportBtn" class="btn">Экспорт BPMN XML</button>
           <button id="exportSvgBtn" class="btn">Экспорт SVG</button>
+          <button id="stepCfgBtn" class="btn" disabled>Настроить шаг</button>
           <button id="runBtn" class="btn primary">Запустить (MVP)</button>
           <span class="spacer"></span>
           <span class="muted" id="autosaveState">Автосохранение: —</span>
@@ -157,6 +210,30 @@
       </div>
     </dialog>
 
+    <dialog id="stepDlg">
+      <div class="dlgHead">
+        <div>
+          <div style="font-weight: 700">Настройка шага</div>
+          <div class="muted" id="stepTitle">—</div>
+        </div>
+        <button id="stepCloseX" class="btn">Закрыть</button>
+      </div>
+      <div class="dlgBody">
+        <div class="muted" style="margin-bottom: 8px">
+          Вставь JSON. Он будет сохранён в BPMN как <code>documentation</code> выбранного элемента.
+        </div>
+        <textarea id="stepJson" class="code" placeholder='{"kind":"note","text":"Пример"}'></textarea>
+        <div class="muted" style="margin-top: 10px">
+          Поддерживаемые <code>kind</code> (MVP): <code>note</code>, <code>change_stage</code>, <code>webhook</code>,
+          <code>timer</code>, <code>set_var</code>.
+        </div>
+      </div>
+      <div class="dlgFoot">
+        <button id="stepCancel" class="btn">Отмена</button>
+        <button id="stepSave" class="btn primary">Сохранить</button>
+      </div>
+    </dialog>
+
     <script src="https://unpkg.com/bpmn-js@18.3.1/dist/bpmn-modeler.development.js"></script>
     <script>
       const autosaveStateEl = document.getElementById("autosaveState");
@@ -179,6 +256,7 @@
       const importBtn = document.getElementById("importBtn");
       const exportBtn = document.getElementById("exportBtn");
       const exportSvgBtn = document.getElementById("exportSvgBtn");
+      const stepCfgBtn = document.getElementById("stepCfgBtn");
       const runBtn = document.getElementById("runBtn");
 
       const STORAGE_KEY = "adaptum_bpmn_xml:v1";
@@ -226,6 +304,72 @@
       const bpmnModeler = new BpmnJS({
         container: "#bpmn",
         keyboard: { bindTo: window },
+      });
+
+      const stepDlg = document.getElementById("stepDlg");
+      const stepTitleEl = document.getElementById("stepTitle");
+      const stepJsonEl = document.getElementById("stepJson");
+      const stepSaveBtn = document.getElementById("stepSave");
+      const stepCancelBtn = document.getElementById("stepCancel");
+      const stepCloseX = document.getElementById("stepCloseX");
+
+      let selectedElement = null;
+
+      function getDocText(el) {
+        const bo = el?.businessObject;
+        if (!bo) return "";
+        return Array.isArray(bo.documentation) && bo.documentation[0] ? bo.documentation[0].text || "" : "";
+      }
+
+      function setDocText(el, text) {
+        const moddle = bpmnModeler.get("moddle");
+        const modeling = bpmnModeler.get("modeling");
+        const bo = el.businessObject;
+        const doc = moddle.create("bpmn:Documentation", { text: String(text || "") });
+        modeling.updateProperties(el, { documentation: [doc] });
+      }
+
+      function elementLabel(el) {
+        const bo = el?.businessObject;
+        const name = bo?.name ? ` — ${bo.name}` : "";
+        return `${bo?.$type || el?.type || "element"}${name}`;
+      }
+
+      bpmnModeler.on("selection.changed", function (e) {
+        const el = e.newSelection && e.newSelection[0] ? e.newSelection[0] : null;
+        selectedElement = el;
+        const ok = Boolean(el && el.businessObject && el.businessObject.$type && !String(el.businessObject.$type).includes("bpmn:SequenceFlow"));
+        stepCfgBtn.disabled = !ok;
+        if (ok) stepCfgBtn.textContent = "Настроить шаг";
+      });
+
+      stepCfgBtn.addEventListener("click", () => {
+        if (!selectedElement) return;
+        stepTitleEl.textContent = elementLabel(selectedElement);
+        stepJsonEl.value = getDocText(selectedElement) || "";
+        stepDlg.showModal();
+      });
+
+      function closeStepDlg() {
+        stepDlg.close();
+      }
+
+      stepCancelBtn.addEventListener("click", closeStepDlg);
+      stepCloseX.addEventListener("click", closeStepDlg);
+
+      stepSaveBtn.addEventListener("click", () => {
+        if (!selectedElement) return closeStepDlg();
+        const v = stepJsonEl.value.trim();
+        if (v) {
+          try {
+            JSON.parse(v);
+          } catch {
+            return log("JSON невалидный. Проверь запятые/кавычки.");
+          }
+        }
+        setDocText(selectedElement, v);
+        closeStepDlg();
+        scheduleAutosave();
       });
 
       async function importXml(xml) {
