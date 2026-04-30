@@ -8,8 +8,6 @@ services:
     startCommand: npm start
     autoDeploy: true
     envVars:
-      - key: PORT
-        value: 8787
       - key: CORS_ORIGIN
         value: "*"
       - key: AMO_REDIRECT_PATH
